@@ -136,29 +136,40 @@ WORKDIR /tmp
 
 COPY --from=builder /runtime-pkgs.txt /tmp/runtime-pkgs.txt
 
-# Install only the libraries the base image does not already have (upgrading
-# base packages such as libsystemd0/libudev1 drags in systemd, whose postinst
-# fails in this container), and never install systemd itself.
-RUN mkdir -p /var/log /var/cache/fontconfig \
- && apt-get update \
- && missing=$(while read -r p; do dpkg -s "$p" >/dev/null 2>&1 || echo "$p"; done < /tmp/runtime-pkgs.txt) \
- && echo "Installing: $missing" \
- && apt-get install -y --no-install-recommends $missing \
+# Packages are installed with the base image's add-pkg, not plain apt-get: in
+# this image /var/log -> /config/log and /etc/passwd -> /tmp/.passwd are
+# dangling symlinks at build time, which makes the postinst scripts of
+# systemd, fontconfig & co. fail. add-pkg creates them for the duration of
+# the install and cleans up (apt lists, logs) afterwards.
+# Only the libraries the base image does not already have are installed
+# (upgrading base packages such as libsystemd0/libudev1 would drag in
+# systemd), and systemd itself is never installed.
+# bsdextrautils (rev) and psmisc (killall) replace busybox applets that the
+# jlesage scripts, written for Alpine, rely on.
+RUN missing=$(while read -r p; do dpkg -s "$p" >/dev/null 2>&1 || echo "$p"; done < /tmp/runtime-pkgs.txt) \
+ && echo "Installing:" $missing \
+ && add-pkg $missing \
       adwaita-icon-theme bash ca-certificates coreutils expect findutils \
       fonts-cantarell gstreamer1.0-libav gstreamer1.0-plugins-base \
       gstreamer1.0-plugins-good librsvg2-common lsscsi pciutils x11-utils \
+      bsdextrautils psmisc \
       systemd- \
- && if [ "${ENABLE_DVDCSS}" = "true" ]; then \
-      apt-get install -y libdvd-pkg && dpkg-reconfigure libdvd-pkg; \
-    fi \
- && apt-get autoremove -y && apt-get clean \
- && rm -rf /var/lib/apt/lists/* /tmp/runtime-pkgs.txt
+ && rm -f /tmp/runtime-pkgs.txt
 
-# Generate and install favicons.
-RUN apt-get update \
- && install_app_icon.sh "https://raw.githubusercontent.com/jlesage/docker-templates/master/jlesage/images/handbrake-icon.png" \
- && apt-get autoremove -y && apt-get clean \
- && rm -rf /var/lib/apt/lists/* /tmp/*
+# Optional libdvdcss (built from source by libdvd-pkg). dpkg-reconfigure runs
+# outside add-pkg, so set up/clean up the same environment it uses.
+RUN if [ "${ENABLE_DVDCSS}" = "true" ]; then \
+      add-pkg libdvd-pkg \
+      && . /opt/base/bin/cmn-pkg \
+      && init_env \
+      && apt-get -q update \
+      && dpkg-reconfigure -f noninteractive libdvd-pkg \
+      && cleanup_env; \
+    fi
+
+# Generate and install favicons (install_app_icon.sh uses add-pkg/del-pkg).
+RUN install_app_icon.sh "https://raw.githubusercontent.com/jlesage/docker-templates/master/jlesage/images/handbrake-icon.png" \
+ && rm -rf /tmp/*
 
 COPY --from=upstream /upstream/rootfs/ /
 COPY --from=builder /install/ /

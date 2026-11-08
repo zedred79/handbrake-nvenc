@@ -145,6 +145,22 @@ jobs:
             grep -aq nvenc_h265 /usr/bin/HandBrakeCLI &&
             test -x /usr/bin/ghb &&
             test -x /usr/bin/list_cpu_features'
+          # Start the container normally (base image init + HandBrake GUI) and
+          # check that the web UI answers and ghb keeps running.
+          docker run -d --name hb-smoke -p 5800:5800 handbrake-nvenc:test
+          trap 'docker logs hb-smoke 2>&1 | tail -n 100; docker rm -f hb-smoke >/dev/null' EXIT
+          ok=false
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://localhost:5800/ \
+               && docker exec hb-smoke pgrep -x ghb >/dev/null; then
+              ok=true; break
+            fi
+            sleep 2
+          done
+          [ "$ok" = true ] || { echo "Web UI or ghb did not come up"; exit 1; }
+          sleep 10
+          docker exec hb-smoke pgrep -x ghb >/dev/null || { echo "ghb exited"; exit 1; }
+          echo "Container started fine"
 
       - name: Push
         if: steps.v.outputs.changed == 'true'

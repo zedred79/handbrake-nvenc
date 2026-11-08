@@ -51,6 +51,7 @@ Open http://localhost:5800 and pick an `NVEnc` encoder. See
 ## Notes
 
 - The CI smoke test has no GPU: it checks that the binaries run and contain
-  the NVENC encoders. A real encode needs a machine with an NVIDIA GPU.
+  the NVENC encoders, and that the container starts (web UI on port 5800,
+  HandBrake GUI running). A real encode needs a machine with an NVIDIA GPU.
 - HandBrake is GPL-2.0; the jlesage scripts are MIT. Add a LICENSE file for
   your own changes.
