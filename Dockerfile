@@ -139,7 +139,8 @@ COPY --from=builder /runtime-pkgs.txt /tmp/runtime-pkgs.txt
 # Install only the libraries the base image does not already have (upgrading
 # base packages such as libsystemd0/libudev1 drags in systemd, whose postinst
 # fails in this container), and never install systemd itself.
-RUN apt-get update \
+RUN mkdir -p /var/log /var/cache/fontconfig \
+ && apt-get update \
  && missing=$(while read -r p; do dpkg -s "$p" >/dev/null 2>&1 || echo "$p"; done < /tmp/runtime-pkgs.txt) \
  && echo "Installing: $missing" \
  && apt-get install -y --no-install-recommends $missing \
