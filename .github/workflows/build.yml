@@ -90,7 +90,7 @@ jobs:
 
       - name: Build (local, for smoke test)
         if: steps.v.outputs.changed == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           load: true
@@ -120,7 +120,7 @@ jobs:
 
       - name: Push
         if: steps.v.outputs.changed == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
