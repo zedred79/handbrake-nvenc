@@ -25,7 +25,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
 RUN mkdir /upstream \
- && curl -fsSL "https://codeload.github.com/jlesage/docker-handbrake/tar.gz/refs/tags/${DOCKER_HANDBRAKE_VERSION}" \
+ && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors "https://codeload.github.com/jlesage/docker-handbrake/tar.gz/refs/tags/${DOCKER_HANDBRAKE_VERSION}" \
     | tar xz --strip-components=1 -C /upstream \
  && test -d /upstream/rootfs \
  && test -f /upstream/src/handbrake/maximized-window.patch
@@ -39,7 +39,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl cmake make g++ \
  && rm -rf /var/lib/apt/lists/*
 RUN mkdir /src \
- && curl -fsSL "https://github.com/google/cpu_features/archive/refs/tags/v${CPU_FEATURES_VERSION}.tar.gz" \
+ && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors "https://github.com/google/cpu_features/archive/refs/tags/v${CPU_FEATURES_VERSION}.tar.gz" \
     | tar xz --strip-components=1 -C /src \
  && cmake -S /src -B /src/build \
       -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
@@ -71,7 +71,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=upstream /upstream/src/handbrake/maximized-window.patch /tmp/maximized-window.patch
 
 RUN mkdir /tmp/handbrake \
- && curl -fsSL "https://github.com/HandBrake/HandBrake/releases/download/${HANDBRAKE_VERSION}/HandBrake-${HANDBRAKE_VERSION}-source.tar.bz2" \
+ && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors "https://github.com/HandBrake/HandBrake/releases/download/${HANDBRAKE_VERSION}/HandBrake-${HANDBRAKE_VERSION}-source.tar.bz2" \
     | tar xj --strip-components=1 -C /tmp/handbrake \
  && patch -d /tmp/handbrake -p1 < /tmp/maximized-window.patch
 
