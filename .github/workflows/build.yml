@@ -78,6 +78,20 @@ jobs:
             echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Download HandBrake source
+        if: steps.v.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HB: ${{ steps.v.outputs.HANDBRAKE_VERSION }}
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            gh release download "$HB" -R HandBrake/HandBrake \
+              -p "HandBrake-${HB}-source.tar.bz2" -D sources --clobber && break
+            echo "retry $i"; sleep 15
+          done
+          ls -l sources/
+
       - uses: docker/setup-buildx-action@v3
         if: steps.v.outputs.changed == 'true'
 

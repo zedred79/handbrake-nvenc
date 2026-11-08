@@ -70,10 +70,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=upstream /upstream/src/handbrake/maximized-window.patch /tmp/maximized-window.patch
 
-RUN mkdir /tmp/handbrake \
- && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors "https://github.com/HandBrake/HandBrake/releases/download/${HANDBRAKE_VERSION}/HandBrake-${HANDBRAKE_VERSION}-source.tar.bz2" \
-    | tar xj --strip-components=1 -C /tmp/handbrake \
- && patch -d /tmp/handbrake -p1 < /tmp/maximized-window.patch
+# The source tarball is taken from ./sources if present (CI pre-downloads it
+# via the GitHub API), otherwise it is downloaded from the release page.
+RUN --mount=type=bind,source=sources,target=/sources \
+    set -eu; mkdir /tmp/handbrake; \
+    f="/sources/HandBrake-${HANDBRAKE_VERSION}-source.tar.bz2"; \
+    if [ ! -s "$f" ]; then \
+      f=/tmp/hb.tar.bz2; \
+      curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$f" \
+        "https://github.com/HandBrake/HandBrake/releases/download/${HANDBRAKE_VERSION}/HandBrake-${HANDBRAKE_VERSION}-source.tar.bz2"; \
+    fi; \
+    tar xjf "$f" --strip-components=1 -C /tmp/handbrake; \
+    rm -f /tmp/hb.tar.bz2; \
+    patch -d /tmp/handbrake -p1 < /tmp/maximized-window.patch
 
 # NVENC/NVDEC use the headers bundled in HandBrake's contrib; the NVIDIA
 # driver libraries are injected at runtime by the NVIDIA container toolkit.
