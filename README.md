@@ -41,21 +41,21 @@ docker run -d --name handbrake --gpus all -p 5800:5800 \
 Open http://localhost:5800 and pick an `NVEnc` encoder. See
 `docker-compose.yml` for a Compose example.
 
-### On the LAN (HTTPS + login)
+### On the LAN
 
 `lan/` has a Compose setup for a server reached from other machines on the
-network: HTTPS with a self-signed certificate, a login page on the web UI,
-files written with your host user, watch folder enabled.
+network: plain HTTP without login, files written with your host user, watch
+folder enabled.
 
 ```sh
 cd lan
-cp .env.example .env   # set WEB_USER/WEB_PASSWORD, USER_ID/GROUP_ID, folders
+cp .env.example .env   # set USER_ID/GROUP_ID and folders
 docker compose up -d
 ```
 
-Open `https://<server-ip>:5800` and accept the certificate warning (or put
-your own certificate in `<config>/certs/web-privkey.pem` and
-`web-fullchain.pem`). Plain `http://` is redirected to HTTPS.
+Open `http://<server-ip>:5800`. To expose it outside the LAN, put it behind a
+reverse proxy such as SWAG (upstream `handbrake:5800`, HTTP) and let the proxy
+handle TLS and authentication.
 
 ## Differences from upstream jlesage image
 

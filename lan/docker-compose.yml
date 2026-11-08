@@ -1,12 +1,14 @@
-# HandBrake NVENC reachable from the LAN.
+# HandBrake NVENC reachable from the LAN (plain HTTP, no login).
 #
-#   cp .env.example .env    # then edit paths, user and password
+#   cp .env.example .env    # then edit paths and user
 #   docker compose up -d
 #
-# Web UI:  https://<server-ip>:5800  (self-signed certificate: accept the
-#          browser warning the first time, or put your own cert in
-#          ${CONFIG_DIR}/certs/web-privkey.pem + web-fullchain.pem)
-# VNC:     <server-ip>:5900 with VNC_PASSWORD (optional, see below)
+# Web UI:  http://<server-ip>:5800
+# VNC:     <server-ip>:5900 (optional, see below)
+#
+# To publish it outside the LAN put it behind a reverse proxy (e.g. SWAG,
+# which has a handbrake proxy-conf sample pointing to `handbrake:5800`) and
+# let the proxy do TLS and authentication; then drop the `ports:` mapping.
 
 services:
   handbrake:
@@ -16,7 +18,7 @@ services:
     hostname: handbrake
 
     ports:
-      - "${WEB_PORT:-5800}:5800"     # web UI (HTTPS)
+      - "${WEB_PORT:-5800}:5800"     # web UI (HTTP)
       # - "${VNC_PORT:-5900}:5900"   # VNC client access (uncomment if needed)
 
     environment:
@@ -26,11 +28,9 @@ services:
       - GROUP_ID=${GROUP_ID:-1000}
       - TZ=${TZ:-Europe/Rome}
 
-      # Access from the LAN: HTTPS + login on the web UI.
-      - SECURE_CONNECTION=1
-      - WEB_AUTHENTICATION=1
-      - WEB_AUTHENTICATION_USERNAME=${WEB_USER:?set WEB_USER in .env}
-      - WEB_AUTHENTICATION_PASSWORD=${WEB_PASSWORD:?set WEB_PASSWORD in .env}
+      # Plain HTTP, no login: TLS/auth are left to the reverse proxy.
+      - SECURE_CONNECTION=0
+      - WEB_AUTHENTICATION=0
       - VNC_PASSWORD=${VNC_PASSWORD:-}
 
       # GUI
@@ -39,7 +39,6 @@ services:
       - DISPLAY_HEIGHT=${DISPLAY_HEIGHT:-1080}
       - KEEP_APP_RUNNING=1
       - WEB_FILE_MANAGER=1        # upload/download files from the browser
-      - WEB_NOTIFICATION=1
 
       # Watch folder: every video dropped in /watch is converted to /output.
       - AUTOMATED_CONVERSION=${AUTOMATED_CONVERSION:-1}
@@ -52,7 +51,7 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=all
 
     volumes:
-      - ${CONFIG_DIR:-./config}:/config:rw     # settings, presets, logs, certs
+      - ${CONFIG_DIR:-./config}:/config:rw     # settings, presets, logs
       - ${STORAGE_DIR:-./storage}:/storage:ro  # sources browsable from the GUI
       - ${WATCH_DIR:-./watch}:/watch:rw        # watch folder (auto conversion)
       - ${OUTPUT_DIR:-./output}:/output:rw     # converted files
