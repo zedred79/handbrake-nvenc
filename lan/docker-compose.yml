@@ -1,0 +1,71 @@
+# HandBrake NVENC reachable from the LAN.
+#
+#   cp .env.example .env    # then edit paths, user and password
+#   docker compose up -d
+#
+# Web UI:  https://<server-ip>:5800  (self-signed certificate: accept the
+#          browser warning the first time, or put your own cert in
+#          ${CONFIG_DIR}/certs/web-privkey.pem + web-fullchain.pem)
+# VNC:     <server-ip>:5900 with VNC_PASSWORD (optional, see below)
+
+services:
+  handbrake:
+    image: ghcr.io/zedred79/handbrake-nvenc:latest
+    container_name: handbrake
+    restart: unless-stopped
+    hostname: handbrake
+
+    ports:
+      - "${WEB_PORT:-5800}:5800"     # web UI (HTTPS)
+      # - "${VNC_PORT:-5900}:5900"   # VNC client access (uncomment if needed)
+
+    environment:
+      # Files written to /output and /config get this owner on the host
+      # (`id -u` / `id -g` of the user that owns the media folders).
+      - USER_ID=${USER_ID:-1000}
+      - GROUP_ID=${GROUP_ID:-1000}
+      - TZ=${TZ:-Europe/Rome}
+
+      # Access from the LAN: HTTPS + login on the web UI.
+      - SECURE_CONNECTION=1
+      - WEB_AUTHENTICATION=1
+      - WEB_AUTHENTICATION_USERNAME=${WEB_USER:?set WEB_USER in .env}
+      - WEB_AUTHENTICATION_PASSWORD=${WEB_PASSWORD:?set WEB_PASSWORD in .env}
+      - VNC_PASSWORD=${VNC_PASSWORD:-}
+
+      # GUI
+      - DARK_MODE=${DARK_MODE:-1}
+      - DISPLAY_WIDTH=${DISPLAY_WIDTH:-1920}
+      - DISPLAY_HEIGHT=${DISPLAY_HEIGHT:-1080}
+      - KEEP_APP_RUNNING=1
+      - WEB_FILE_MANAGER=1        # upload/download files from the browser
+      - WEB_NOTIFICATION=1
+
+      # Watch folder: every video dropped in /watch is converted to /output.
+      - AUTOMATED_CONVERSION=${AUTOMATED_CONVERSION:-1}
+      - AUTOMATED_CONVERSION_PRESET=${AUTOMATED_CONVERSION_PRESET:-General/Very Fast 1080p30}
+      - AUTOMATED_CONVERSION_FORMAT=${AUTOMATED_CONVERSION_FORMAT:-mkv}
+      - AUTOMATED_CONVERSION_KEEP_SOURCE=${AUTOMATED_CONVERSION_KEEP_SOURCE:-1}
+
+      # NVIDIA: GPU + NVENC/NVDEC libraries injected by the container toolkit.
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=all
+
+    volumes:
+      - ${CONFIG_DIR:-./config}:/config:rw     # settings, presets, logs, certs
+      - ${STORAGE_DIR:-./storage}:/storage:ro  # sources browsable from the GUI
+      - ${WATCH_DIR:-./watch}:/watch:rw        # watch folder (auto conversion)
+      - ${OUTPUT_DIR:-./output}:/output:rw     # converted files
+
+    # Optical drive (DVD/Blu-ray ripping): uncomment and adjust.
+    # devices:
+    #   - /dev/sr0:/dev/sr0
+    #   - /dev/sg0:/dev/sg0
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]
