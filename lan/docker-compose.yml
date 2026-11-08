@@ -6,9 +6,8 @@
 # Web UI:  http://<server-ip>:5800
 # VNC:     <server-ip>:5900 (optional, see below)
 #
-# To publish it outside the LAN put it behind a reverse proxy (e.g. SWAG,
-# which has a handbrake proxy-conf sample pointing to `handbrake:5800`) and
-# let the proxy do TLS and authentication; then drop the `ports:` mapping.
+# To publish it outside the LAN put it behind SWAG, which does TLS and
+# authentication: see docker-compose.swag.yml and swag/handbrake.subdomain.conf.
 
 services:
   handbrake:

@@ -53,9 +53,23 @@ cp .env.example .env   # set USER_ID/GROUP_ID and folders
 docker compose up -d
 ```
 
-Open `http://<server-ip>:5800`. To expose it outside the LAN, put it behind a
-reverse proxy such as SWAG (upstream `handbrake:5800`, HTTP) and let the proxy
-handle TLS and authentication.
+Open `http://<server-ip>:5800`.
+
+### Behind SWAG
+
+To expose it outside the LAN, let [SWAG](https://github.com/linuxserver/docker-swag)
+handle TLS and authentication:
+
+1. Copy `lan/swag/handbrake.subdomain.conf` to
+   `<swag config>/nginx/proxy-confs/` and make sure `handbrake.<domain>` is
+   in DNS and covered by the SWAG certificate.
+2. Create the login (HTTP basic auth is enabled in the conf; switch to
+   Authelia/Authentik there if you use them):
+   `docker exec -it swag htpasswd -c /config/nginx/.htpasswd <user>`
+3. Set `SWAG_NETWORK` in `lan/.env` and start with the override, which joins
+   SWAG's network and stops publishing port 5800:
+   `docker compose -f docker-compose.yml -f docker-compose.swag.yml up -d`
+4. Restart SWAG (`docker restart swag`) and open `https://handbrake.<domain>`.
 
 ## Differences from upstream jlesage image
 

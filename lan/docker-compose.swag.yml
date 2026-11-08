@@ -1,0 +1,21 @@
+# Production behind SWAG: no port published on the host, the container is
+# reached only through SWAG on its docker network.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.swag.yml up -d
+#
+# (or put COMPOSE_FILE=docker-compose.yml:docker-compose.swag.yml in .env and
+# just run `docker compose up -d`)
+#
+# SWAG_NETWORK is the name of the docker network SWAG is attached to
+# (`docker inspect swag -f '{{json .NetworkSettings.Networks}}'`).
+
+services:
+  handbrake:
+    ports: !reset []
+    networks:
+      - swag
+
+networks:
+  swag:
+    name: ${SWAG_NETWORK:?set SWAG_NETWORK in .env}
+    external: true
