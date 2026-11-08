@@ -90,7 +90,21 @@ jobs:
               -p "HandBrake-${HB}-source.tar.bz2" -D sources --clobber && break
             echo "retry $i"; sleep 15
           done
-          ls -l sources/
+          # Pre-fetch the contrib tarballs hosted as GitHub release assets
+          # (direct release downloads from the runner fail with 504).
+          mkdir -p /tmp/hb sources/download
+          tar xjf "sources/HandBrake-${HB}-source.tar.bz2" --strip-components=1 -C /tmp/hb
+          grep -ho 'https://github.com/[^/ ]*/[^/ ]*/releases/download/[^ ]*' /tmp/hb/contrib/*/module.defs \
+            | sort -u | while read -r url; do
+              rest=${url#https://github.com/}
+              repo=$(cut -d/ -f1,2 <<<"$rest")
+              tag=$(cut -d/ -f5 <<<"$rest")
+              file=$(cut -d/ -f6- <<<"$rest")
+              [ -s "sources/download/$file" ] && continue
+              gh release download "$tag" -R "$repo" -p "$file" -D sources/download \
+                || echo "::warning::could not pre-fetch $url"
+            done
+          ls -l sources/ sources/download/
 
       - uses: docker/setup-buildx-action@v3
         if: steps.v.outputs.changed == 'true'

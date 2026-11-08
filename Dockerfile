@@ -82,6 +82,10 @@ RUN --mount=type=bind,source=sources,target=/sources \
     fi; \
     tar xjf "$f" --strip-components=1 -C /tmp/handbrake; \
     rm -f /tmp/hb.tar.bz2; \
+    if [ -d /sources/download ]; then \
+      mkdir -p /tmp/handbrake/download; \
+      cp /sources/download/* /tmp/handbrake/download/ 2>/dev/null || true; \
+    fi; \
     patch -d /tmp/handbrake -p1 < /tmp/maximized-window.patch
 
 # NVENC/NVDEC use the headers bundled in HandBrake's contrib; the NVIDIA
