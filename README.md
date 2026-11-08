@@ -507,6 +507,10 @@ timeout. The [SWAG conf](lan/swag/handbrake.subdomain.conf) does this.
 
 ## Credits and licenses
 
+The files in this repository (Dockerfile, workflow, Compose and proxy
+configurations, documentation) are released under the [MIT License](LICENSE).
+The Docker image also contains software released under other licenses:
+
 - [HandBrake](https://handbrake.fr/) is licensed under the
   [GPL-2.0](https://github.com/HandBrake/HandBrake/blob/master/LICENSE).
 - [jlesage/docker-handbrake](https://github.com/jlesage/docker-handbrake) and
