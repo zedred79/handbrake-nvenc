@@ -1,0 +1,170 @@
+name: Build and publish
+
+on:
+  schedule:
+    - cron: "23 4 * * *"          # daily: follow jlesage/docker-handbrake releases
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild even if versions did not change"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - versions.env
+      - .github/workflows/build.yml
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve target versions
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          source versions.env
+          CUR="$HANDBRAKE_VERSION $DOCKER_HANDBRAKE_VERSION $BASEIMAGE_VERSION $CPU_FEATURES_VERSION"
+
+          if [ "$EVENT" = "push" ]; then
+            # Build exactly what is committed.
+            changed=true; bump=false
+          else
+            JL_TAG=$(gh api repos/jlesage/docker-handbrake/releases/latest --jq .tag_name)
+            RAW=$(curl -fsSL "https://raw.githubusercontent.com/jlesage/docker-handbrake/${JL_TAG}/Dockerfile")
+            HB=$(sed -n 's/^ARG HANDBRAKE_VERSION=//p' <<<"$RAW" | head -n1)
+            BASE=$(sed -n 's/^FROM jlesage\/baseimage-gui:alpine-[0-9.]*-v//p' <<<"$RAW" | head -n1)
+            CPUF=$(sed -n 's/^ARG CPU_FEATURES_VERSION=//p' <<<"$RAW" | head -n1)
+            for x in "$JL_TAG" "$HB" "$BASE" "$CPUF"; do
+              [ -n "$x" ] || { echo "Could not parse upstream versions"; exit 1; }
+            done
+            NEW="$HB $JL_TAG $BASE $CPUF"
+            if [ "$NEW" != "$CUR" ]; then
+              changed=true; bump=true
+              HANDBRAKE_VERSION=$HB; DOCKER_HANDBRAKE_VERSION=$JL_TAG
+              BASEIMAGE_VERSION=$BASE; CPU_FEATURES_VERSION=$CPUF
+            elif [ "$FORCE" = "true" ]; then
+              changed=true; bump=false
+            else
+              changed=false; bump=false
+            fi
+          fi
+
+          {
+            echo "changed=$changed"
+            echo "bump=$bump"
+            echo "HANDBRAKE_VERSION=$HANDBRAKE_VERSION"
+            echo "DOCKER_HANDBRAKE_VERSION=$DOCKER_HANDBRAKE_VERSION"
+            echo "BASEIMAGE_VERSION=$BASEIMAGE_VERSION"
+            echo "CPU_FEATURES_VERSION=$CPU_FEATURES_VERSION"
+            echo "UBUNTU_VERSION=$UBUNTU_VERSION"
+            echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.v.outputs.changed == 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.v.outputs.changed == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build (local, for smoke test)
+        if: steps.v.outputs.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: handbrake-nvenc:test
+          build-args: |
+            HANDBRAKE_VERSION=${{ steps.v.outputs.HANDBRAKE_VERSION }}
+            DOCKER_HANDBRAKE_VERSION=${{ steps.v.outputs.DOCKER_HANDBRAKE_VERSION }}
+            BASEIMAGE_VERSION=${{ steps.v.outputs.BASEIMAGE_VERSION }}
+            CPU_FEATURES_VERSION=${{ steps.v.outputs.CPU_FEATURES_VERSION }}
+            UBUNTU_VERSION=${{ steps.v.outputs.UBUNTU_VERSION }}
+            DOCKER_IMAGE_VERSION=${{ steps.v.outputs.HANDBRAKE_VERSION }}-${{ steps.v.outputs.DOCKER_HANDBRAKE_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        if: steps.v.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          # No GPU on the runner: check the binaries start and were built with
+          # NVENC/NVDEC support (encoder names are compiled into the binary).
+          docker run --rm --entrypoint /usr/bin/HandBrakeCLI handbrake-nvenc:test --version
+          docker run --rm --entrypoint /bin/sh handbrake-nvenc:test -c '
+            grep -aq nvenc_h264 /usr/bin/HandBrakeCLI &&
+            grep -aq nvenc_h265 /usr/bin/HandBrakeCLI &&
+            test -x /usr/bin/ghb &&
+            test -x /usr/bin/list_cpu_features'
+
+      - name: Push
+        if: steps.v.outputs.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.v.outputs.IMAGE }}:latest
+            ${{ steps.v.outputs.IMAGE }}:${{ steps.v.outputs.HANDBRAKE_VERSION }}
+            ${{ steps.v.outputs.IMAGE }}:${{ steps.v.outputs.HANDBRAKE_VERSION }}-${{ steps.v.outputs.DOCKER_HANDBRAKE_VERSION }}
+          build-args: |
+            HANDBRAKE_VERSION=${{ steps.v.outputs.HANDBRAKE_VERSION }}
+            DOCKER_HANDBRAKE_VERSION=${{ steps.v.outputs.DOCKER_HANDBRAKE_VERSION }}
+            BASEIMAGE_VERSION=${{ steps.v.outputs.BASEIMAGE_VERSION }}
+            CPU_FEATURES_VERSION=${{ steps.v.outputs.CPU_FEATURES_VERSION }}
+            UBUNTU_VERSION=${{ steps.v.outputs.UBUNTU_VERSION }}
+            DOCKER_IMAGE_VERSION=${{ steps.v.outputs.HANDBRAKE_VERSION }}-${{ steps.v.outputs.DOCKER_HANDBRAKE_VERSION }}
+          cache-from: type=gha
+
+      # Only after a successful build+test+push do we record the new versions.
+      - name: Commit version bump
+        if: steps.v.outputs.bump == 'true'
+        run: |
+          set -euo pipefail
+          cat > versions.env <<EOF
+          # Pinned versions. Updated automatically by .github/workflows/build.yml,
+          # which mirrors what jlesage/docker-handbrake ships in its latest release.
+          HANDBRAKE_VERSION=${{ steps.v.outputs.HANDBRAKE_VERSION }}
+          DOCKER_HANDBRAKE_VERSION=${{ steps.v.outputs.DOCKER_HANDBRAKE_VERSION }}
+          BASEIMAGE_VERSION=${{ steps.v.outputs.BASEIMAGE_VERSION }}
+          CPU_FEATURES_VERSION=${{ steps.v.outputs.CPU_FEATURES_VERSION }}
+          UBUNTU_VERSION=${{ steps.v.outputs.UBUNTU_VERSION }}
+          EOF
+          sed -i 's/^          //' versions.env
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add versions.env
+          git commit -m "chore: bump HandBrake ${{ steps.v.outputs.HANDBRAKE_VERSION }} (jlesage ${{ steps.v.outputs.DOCKER_HANDBRAKE_VERSION }})"
+          git push
+
+      - name: Open an issue if the scheduled build failed
+        if: failure() && github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Scheduled build failed"
+          if [ -z "$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number')" ]; then
+            gh issue create --title "$title" \
+              --body "The build failed: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          fi
